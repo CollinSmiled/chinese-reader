@@ -1,0 +1,38 @@
+:root {
+  /* Primary — Vermillion red */
+  --red-50:  #FCEBEB;
+  --red-100: #F7C1C1;
+  --red-400: #E24B4A;
+  --red-600: #C0392B;
+  --red-800: #791F1F;
+  --red-900: #501313;
+
+  /* Accent — Warm gold */
+  --gold-50:  #FAEEDA;
+  --gold-400: #EF9F27;
+  --gold-600: #BA7517;
+  --gold-800: #633806;
+
+  /* Ink — Neutral */
+  --ink-0:   #FFF8F5;
+  --ink-50:  #F1EFE8;
+  --ink-200: #B4B2A9;
+  --ink-400: #888780;
+  --ink-900: #2C2C2A;
+
+  /* Jade teal — Feedback */
+  --teal-50:  #E1F5EE;
+  --teal-400: #1D9E75;
+  --teal-800: #085041;
+
+  /* Layout */
+  --nav-width: 220px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* Typography */
+  --font-display: 'Noto Serif SC', 'Noto Serif', serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+}

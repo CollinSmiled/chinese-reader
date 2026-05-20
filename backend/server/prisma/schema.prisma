@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                 String              @id @default(uuid()) @db.Uuid
+  email              String              @unique
+  passwordHash       String              @map("password_hash")
+  decks              Deck[]
+  readingCollections ReadingCollection[]
+  readings           Reading[]
+  sessions           Session[]
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Reading {
+  id                String      @id @default(uuid()) @db.Uuid
+  userId            String?     @map("user_id") @db.Uuid
+  collectionId      String?     @map("collection_id") @db.Uuid
+  user              User?       @relation(fields: [userId], references: [id])
+  collection        ReadingCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  title             String?
+  originalText      String      @map("original_text")
+  analyzedContent   Json        @map("analyzed_content")
+  wordCount         Int         @map("word_count")
+  estimatedHskLevel Int?        @map("estimated_hsk_level")
+  deckWords         DeckWord[]
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  @@map("readings")
+}
+
+model ReadingCollection {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String
+  description String?
+  isDefault   Boolean   @default(false) @map("is_default")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readings    Reading[]
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("reading_collections")
+}
+
+model VocabularyEntry {
+  id         String      @id @default(uuid()) @db.Uuid
+  word       String
+  pinyin     String?
+  meaning    String?
+  hskLevel   Int?        @map("hsk_level")
+  deckWords  DeckWord[]
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  @@map("vocabulary_entries")
+}
+
+model Deck {
+  id          String     @id @default(uuid()) @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  name        String
+  description String?
+  isDefault   Boolean    @default(false) @map("is_default")
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  words       DeckWord[]
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("decks")
+}
+
+model DeckWord {
+  id                String          @id @default(uuid()) @db.Uuid
+  deckId            String          @map("deck_id") @db.Uuid
+  vocabularyEntryId String          @map("vocabulary_entry_id") @db.Uuid
+  sourceReadingId   String?         @map("source_reading_id") @db.Uuid
+  exampleSentence   String?         @map("example_sentence")
+  deck              Deck            @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  vocabularyEntry   VocabularyEntry @relation(fields: [vocabularyEntryId], references: [id], onDelete: Cascade)
+  sourceReading     Reading?        @relation(fields: [sourceReadingId], references: [id])
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  @@unique([deckId, vocabularyEntryId])
+  @@index([deckId])
+  @@map("deck_words")
+}
