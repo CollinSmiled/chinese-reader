@@ -19,13 +19,24 @@ export class ExamplesService {
       include: {
         sentence: true,
       },
-      take: 80,
+      take: 200,
     });
 
-    return matches
+    const rankedExamples = matches
       .map((match) => this.toDto(match.sentence))
       .sort((left, right) => this.score(left) - this.score(right))
-      .slice(0, safeLimit);
+
+    const uniqueByChinese = new Map<string, ExampleSentenceDto>();
+
+    for (const example of rankedExamples) {
+      if (!uniqueByChinese.has(example.chinese)) {
+        uniqueByChinese.set(example.chinese, example);
+      }
+
+      if (uniqueByChinese.size >= safeLimit) break;
+    }
+
+    return [...uniqueByChinese.values()];
   }
 
   private score(example: ExampleSentenceDto): number {
