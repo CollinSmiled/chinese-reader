@@ -4,12 +4,16 @@ import { RiArrowDownSLine, RiStackLine } from 'react-icons/ri'
 import TextInput from '../components/reader/TextInput'
 import GradedOutput from '../components/reader/GradedOutput'
 import ReadingProfile from '../components/reader/ReadingProfile'
-import type { AnalysisToken, AnalyzedWord, Deck, Reading, ReadingCollection } from '../types'
+import type { AnalysisToken, AnalyzedWord, Deck, DeckWord, Reading, ReadingCollection } from '../types'
 import { useAuth } from '../auth/AuthContext'
 import { formatPinyin } from '../utils/pinyin'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 const READER_DRAFT_KEY = 'hanzipath.readerDraft'
+
+function getSavedWordKey(word: string, pinyin?: string | null) {
+  return `${word.trim()}::${formatPinyin(pinyin).trim().toLowerCase()}`
+}
 
 interface ReaderDraft {
   currentReadingId?: string
@@ -62,6 +66,7 @@ export default function Reader() {
   const [resetKey, setResetKey] = useState(0)
   const [decks, setDecks] = useState<Deck[]>([])
   const [selectedDeckId, setSelectedDeckId] = useState<string | undefined>()
+  const [selectedDeckWordKeys, setSelectedDeckWordKeys] = useState<Set<string>>(new Set())
   const [collections, setCollections] = useState<ReadingCollection[]>([])
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | undefined>()
   const [isCollectionMenuOpen, setIsCollectionMenuOpen] = useState(false)
@@ -161,6 +166,25 @@ export default function Reader() {
 
     void loadUserResources()
   }, [authenticatedFetch, user])
+
+  useEffect(() => {
+    const loadSelectedDeckWords = async () => {
+      if (!user || !selectedDeckId) {
+        setSelectedDeckWordKeys(new Set())
+        return
+      }
+
+      const response = await authenticatedFetch(`${API_URL}/api/v1/decks/${selectedDeckId}/words`)
+      if (!response.ok) return
+
+      const words = (await response.json()) as DeckWord[]
+      setSelectedDeckWordKeys(
+        new Set(words.map((word) => getSavedWordKey(word.word, word.pinyin))),
+      )
+    }
+
+    void loadSelectedDeckWords()
+  }, [authenticatedFetch, selectedDeckId, user])
 
   const handleAnalyze = async (text: string) => {
     setLoading(true)
@@ -265,6 +289,8 @@ export default function Reader() {
 
     setSavingWord(entry.word)
     setError(null)
+    const entryPinyin = formatPinyin(entry.dictionary[0]?.pinyin ?? entry.generated_pinyin)
+    const savedWordKey = getSavedWordKey(entry.word, entryPinyin)
 
     try {
       const response = await authenticatedFetch(
@@ -274,7 +300,7 @@ export default function Reader() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             word: entry.word,
-            pinyin: formatPinyin(entry.dictionary[0]?.pinyin ?? entry.generated_pinyin),
+            pinyin: entryPinyin,
             meaning: entry.dictionary[0]?.english,
             hskLevel: entry.hsk_level,
             sourceReadingId: currentReadingId,
@@ -285,6 +311,7 @@ export default function Reader() {
 
       if (response.status === 409) {
         setSaveMessage(`${entry.word} is already in this deck`)
+        setSelectedDeckWordKeys((current) => new Set(current).add(savedWordKey))
         return
       }
 
@@ -295,12 +322,20 @@ export default function Reader() {
           item.id === deckId ? { ...item, wordCount: item.wordCount + 1 } : item,
         ),
       )
+      setSelectedDeckWordKeys((current) => new Set(current).add(savedWordKey))
       setSaveMessage(`Saved ${entry.word}${deck ? ` to ${deck.name}` : ''}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setSavingWord(null)
     }
+  }
+
+  const isWordSavedInSelectedDeck = (entry: AnalyzedWord, deckId: string) => {
+    if (deckId !== selectedDeckId) return false
+    return selectedDeckWordKeys.has(
+      getSavedWordKey(entry.word, entry.dictionary[0]?.pinyin ?? entry.generated_pinyin),
+    )
   }
 
   const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId)
@@ -480,6 +515,7 @@ export default function Reader() {
               onSaveWord={handleSaveWord}
               savingWord={savingWord}
               canSaveWords={Boolean(user && decks.length > 0)}
+              isWordSaved={isWordSavedInSelectedDeck}
             />
           ) : (
             <div className="h-full min-h-[420px] flex flex-col items-center justify-center gap-2.5 bg-white border-2 border-dashed border-ink-200 rounded-lg text-center p-10">

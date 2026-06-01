@@ -4,6 +4,7 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { AuthModule } from './auth/auth.module';
 import { DecksModule } from './decks/decks.module';
 import { DictionaryModule } from './dictionary/dictionary.module';
+import { ExamplesModule } from './examples/examples.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReadingCollectionsModule } from './reading-collections/reading-collections.module';
@@ -19,6 +20,7 @@ import { UsersModule } from './users/users.module';
     AnalysisModule,
     DecksModule,
     DictionaryModule,
+    ExamplesModule,
     HealthModule,
     ReadingCollectionsModule,
     ReadingsModule,

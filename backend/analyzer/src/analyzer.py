@@ -1,8 +1,8 @@
-from segmentation import segment_text
-from hsk import get_hsk_level
-from dict import get_dict_entries
-from pinyin import get_pinyin
-from pinyin_convert import convert_pinyin
+from .segmentation import segment_text
+from .hsk import get_hsk_level
+from .dict import get_dict_entries
+from .pinyin import get_pinyin
+from .pinyin_convert import convert_pinyin
 
 
 def analyze_text(text: str) -> list[dict]:

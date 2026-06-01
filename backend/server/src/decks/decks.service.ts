@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Deck } from '@prisma/client';
+import { Deck, ExampleSentence } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeckDto } from './dto/create-deck.dto';
 import { CreateDeckWordDto } from './dto/create-deck-word.dto';
@@ -120,6 +120,7 @@ export class DecksService {
     const words = await this.prisma.deckWord.findMany({
       where: { deckId },
       include: {
+        example: true,
         vocabularyEntry: true,
       },
       orderBy: {
@@ -134,7 +135,9 @@ export class DecksService {
       meaning: word.vocabularyEntry.meaning,
       hskLevel: word.vocabularyEntry.hskLevel,
       sourceReadingId: word.sourceReadingId,
+      exampleSentenceId: word.exampleSentenceId,
       exampleSentence: word.exampleSentence,
+      example: this.toExampleDto(word.example),
       createdAt: word.createdAt,
     }));
   }
@@ -177,14 +180,28 @@ export class DecksService {
       throw new ConflictException('This word is already in the deck.');
     }
 
+    if (payload.exampleSentenceId) {
+      const example = await this.prisma.exampleSentence.findUnique({
+        where: { id: payload.exampleSentenceId },
+      });
+
+      if (!example) {
+        throw new NotFoundException(
+          `Example sentence with id "${payload.exampleSentenceId}" not found.`,
+        );
+      }
+    }
+
     const deckWord = await this.prisma.deckWord.create({
       data: {
         deckId,
         vocabularyEntryId: entry.id,
         sourceReadingId: payload.sourceReadingId,
+        exampleSentenceId: payload.exampleSentenceId,
         exampleSentence: payload.exampleSentence,
       },
       include: {
+        example: true,
         vocabularyEntry: true,
       },
     });
@@ -196,7 +213,9 @@ export class DecksService {
       meaning: deckWord.vocabularyEntry.meaning,
       hskLevel: deckWord.vocabularyEntry.hskLevel,
       sourceReadingId: deckWord.sourceReadingId,
+      exampleSentenceId: deckWord.exampleSentenceId,
       exampleSentence: deckWord.exampleSentence,
+      example: this.toExampleDto(deckWord.example),
       createdAt: deckWord.createdAt,
     };
   }
@@ -241,6 +260,7 @@ export class DecksService {
         deckId: sourceDeckId,
       },
       include: {
+        example: true,
         vocabularyEntry: true,
       },
     });
@@ -268,6 +288,7 @@ export class DecksService {
         deckId: targetDeckId,
       },
       include: {
+        example: true,
         vocabularyEntry: true,
       },
     });
@@ -295,6 +316,7 @@ export class DecksService {
         meaning: string | null;
         hskLevel: number | null;
       };
+      example: ExampleSentence | null;
     },
   ): DeckWordDto {
     return {
@@ -304,8 +326,23 @@ export class DecksService {
       meaning: deckWord.vocabularyEntry.meaning,
       hskLevel: deckWord.vocabularyEntry.hskLevel,
       sourceReadingId: deckWord.sourceReadingId,
+      exampleSentenceId: deckWord.exampleSentenceId,
       exampleSentence: deckWord.exampleSentence,
+      example: this.toExampleDto(deckWord.example),
       createdAt: deckWord.createdAt,
+    };
+  }
+
+  private toExampleDto(example: ExampleSentence | null): DeckWordDto['example'] {
+    if (!example) return null;
+
+    return {
+      id: example.id,
+      chinese: example.chineseSimplified,
+      chineseOriginal: example.chineseOriginal,
+      english: example.english,
+      pinyin: example.pinyin,
+      source: example.source,
     };
   }
 

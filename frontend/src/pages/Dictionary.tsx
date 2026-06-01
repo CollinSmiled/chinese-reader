@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
-import { RiArrowDownSLine, RiSearchLine, RiStackLine } from 'react-icons/ri'
+import { RiArrowDownSLine, RiBookOpenLine, RiSearchLine, RiStackLine } from 'react-icons/ri'
 import { useNavigate } from 'react-router-dom'
-import type { Deck, DictionarySearchResult } from '../types'
+import type { Deck, DeckWord, DictionarySearchResult, ExampleSentence } from '../types'
 import { useAuth } from '../auth/AuthContext'
 import { getHskColor } from '../utils/hsk'
 import { formatPinyin } from '../utils/pinyin'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+
+function getSavedWordKey(word: string, pinyin?: string | null) {
+  return `${word.trim()}::${formatPinyin(pinyin).trim().toLowerCase()}`
+}
 
 async function getErrorMessage(response: Response) {
   try {
@@ -27,9 +31,14 @@ export default function Dictionary() {
   const [results, setResults] = useState<DictionarySearchResult[]>([])
   const [decks, setDecks] = useState<Deck[]>([])
   const [selectedDeckId, setSelectedDeckId] = useState<string | undefined>()
+  const [selectedDeckWordKeys, setSelectedDeckWordKeys] = useState<Set<string>>(new Set())
   const [isDeckMenuOpen, setIsDeckMenuOpen] = useState(false)
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const [examplesByKey, setExamplesByKey] = useState<Record<string, ExampleSentence[]>>({})
+  const [selectedExampleByKey, setSelectedExampleByKey] = useState<Record<string, string | null>>({})
+  const [loadingExamplesKey, setLoadingExamplesKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -54,6 +63,25 @@ export default function Dictionary() {
   }, [authLoading, authenticatedFetch, user])
 
   useEffect(() => {
+    const loadSelectedDeckWords = async () => {
+      if (!user || !selectedDeckId) {
+        setSelectedDeckWordKeys(new Set())
+        return
+      }
+
+      const response = await authenticatedFetch(`${API_URL}/api/v1/decks/${selectedDeckId}/words`)
+      if (!response.ok) return
+
+      const words = (await response.json()) as DeckWord[]
+      setSelectedDeckWordKeys(
+        new Set(words.map((word) => getSavedWordKey(word.word, word.pinyin))),
+      )
+    }
+
+    void loadSelectedDeckWords()
+  }, [authenticatedFetch, selectedDeckId, user])
+
+  useEffect(() => {
     const trimmed = query.trim()
     if (!trimmed) {
       setResults([])
@@ -73,6 +101,9 @@ export default function Dictionary() {
         })
         if (!response.ok) throw new Error(`Server error: ${response.status}`)
         setResults((await response.json()) as DictionarySearchResult[])
+        setExpandedKey(null)
+        setExamplesByKey({})
+        setSelectedExampleByKey({})
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Unknown error')
@@ -87,7 +118,35 @@ export default function Dictionary() {
     }
   }, [query])
 
-  const handleSaveWord = async (entry: DictionarySearchResult, index: number) => {
+  const loadExamples = async (entry: DictionarySearchResult, resultKey: string) => {
+    if (examplesByKey[resultKey]) return
+
+    setLoadingExamplesKey(resultKey)
+
+    try {
+      const params = new URLSearchParams({ word: entry.word, limit: '5' })
+      const response = await fetch(`${API_URL}/api/v1/examples?${params}`)
+      if (!response.ok) throw new Error(`Server error: ${response.status}`)
+
+      const examples = (await response.json()) as ExampleSentence[]
+      setExamplesByKey((current) => ({ ...current, [resultKey]: examples }))
+      setSelectedExampleByKey((current) => ({
+        ...current,
+        [resultKey]: current[resultKey] ?? examples[0]?.id ?? null,
+      }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoadingExamplesKey(null)
+    }
+  }
+
+  const handleToggleResult = (entry: DictionarySearchResult, resultKey: string) => {
+    setExpandedKey((current) => (current === resultKey ? null : resultKey))
+    void loadExamples(entry, resultKey)
+  }
+
+  const handleSaveWord = async (entry: DictionarySearchResult, resultKey: string) => {
     if (!user) {
       navigate('/auth')
       return
@@ -95,8 +154,9 @@ export default function Dictionary() {
 
     if (!selectedDeckId) return
 
-    const key = `${entry.word}-${entry.pinyin}-${index}`
-    setSavingKey(key)
+    const savedWordKey = getSavedWordKey(entry.word, entry.pinyin)
+    const selectedExampleId = selectedExampleByKey[resultKey]
+    setSavingKey(resultKey)
     setSaveMessage(null)
     setError(null)
 
@@ -109,6 +169,7 @@ export default function Dictionary() {
           pinyin: entry.pinyin,
           meaning: entry.definitions.join('; '),
           hskLevel: entry.hskLevel,
+          exampleSentenceId: selectedExampleId,
         }),
       })
 
@@ -116,6 +177,7 @@ export default function Dictionary() {
 
       if (response.status === 409) {
         setSaveMessage(`${entry.word} is already in ${deck?.name ?? 'this deck'}`)
+        setSelectedDeckWordKeys((current) => new Set(current).add(savedWordKey))
         return
       }
 
@@ -128,6 +190,7 @@ export default function Dictionary() {
             : deckItem,
         ),
       )
+      setSelectedDeckWordKeys((current) => new Set(current).add(savedWordKey))
       setSaveMessage(`Saved ${entry.word}${deck ? ` to ${deck.name}` : ''}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -239,61 +302,168 @@ export default function Dictionary() {
         <div className="bg-white border border-ink-50 rounded-lg divide-y divide-ink-50">
           {results.map((entry, index) => {
             const resultKey = getResultKey(entry, index)
+            const alreadySaved = selectedDeckWordKeys.has(getSavedWordKey(entry.word, entry.pinyin))
+            const isExpanded = expandedKey === resultKey
+            const examples = examplesByKey[resultKey] ?? []
+            const selectedExampleId = selectedExampleByKey[resultKey] ?? null
 
             return (
-            <div key={resultKey} className="p-5 flex items-start gap-5">
-              <div className="min-w-28">
-                <div className="text-2xl font-display font-bold text-ink-900">{entry.word}</div>
-                {entry.traditional && entry.traditional !== entry.word && (
-                  <div className="text-xs text-ink-400 mt-1">{entry.traditional}</div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-medium text-red-600">
-                    {formatPinyin(entry.pinyin)}
-                  </span>
-                  {entry.hskLevel && (
-                    <span
-                      className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                      style={{
-                        background: getHskColor(entry.hskLevel).bg,
-                        color: getHskColor(entry.hskLevel).text,
-                      }}
-                    >
-                      {getHskColor(entry.hskLevel).label}
-                    </span>
+            <div
+              key={resultKey}
+              className={`p-5 transition-colors duration-150 ${
+                isExpanded ? 'bg-white' : 'hover:bg-ink-0/70'
+              }`}
+            >
+              <button
+                className="group flex w-full items-start gap-5 rounded-md text-left transition-opacity duration-150 hover:opacity-95"
+                type="button"
+                onClick={() => handleToggleResult(entry, resultKey)}
+              >
+                <div className="min-w-28">
+                  <div className="text-2xl font-display font-bold text-ink-900 transition-colors duration-150 group-hover:text-red-800">
+                    {entry.word}
+                  </div>
+                  {entry.traditional && entry.traditional !== entry.word && (
+                    <div className="text-xs text-ink-400 mt-1">{entry.traditional}</div>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {entry.definitions.map((definition) => (
-                    <span
-                      key={definition}
-                      className="rounded-md bg-ink-0 px-2.5 py-1 text-sm text-ink-900"
-                    >
-                      {definition}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-medium text-red-600">
+                      {formatPinyin(entry.pinyin)}
                     </span>
-                  ))}
+                    {entry.hskLevel && (
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{
+                          background: getHskColor(entry.hskLevel).bg,
+                          color: getHskColor(entry.hskLevel).text,
+                        }}
+                      >
+                        {getHskColor(entry.hskLevel).label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entry.definitions.map((definition) => (
+                      <span
+                        key={definition}
+                        className="rounded-md bg-ink-0 px-2.5 py-1 text-sm text-ink-900"
+                      >
+                        {definition}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="w-32 shrink-0 flex justify-end">
-                {user && decks.length > 0 ? (
-                  <button
-                    className="btn-secondary h-9 rounded-md px-3 text-xs font-medium"
-                    onClick={() => void handleSaveWord(entry, index)}
-                    disabled={savingKey === resultKey || !selectedDeckId}
+                <div className="flex w-36 shrink-0 items-start justify-end">
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      isExpanded
+                        ? 'bg-red-50 text-red-800'
+                        : 'bg-ink-0 text-ink-400 group-hover:text-ink-900'
+                    }`}
                   >
-                    {savingKey === resultKey ? 'Saving...' : 'Save'}
-                  </button>
-                ) : (
-                  <button
-                    className="btn-secondary h-9 rounded-md px-3 text-xs font-medium"
-                    onClick={() => navigate('/auth')}
-                  >
-                    Sign in to save
-                  </button>
-                )}
-              </div>
+                    <RiBookOpenLine className="text-sm" />
+                    Examples
+                  </span>
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div className="mt-4 ml-0 rounded-lg border border-ink-50 bg-ink-0 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-ink-400">
+                        Example sentences
+                      </p>
+                      <p className="text-xs text-ink-400">
+                        Choose one to attach when saving this word.
+                      </p>
+                    </div>
+                    {user && decks.length > 0 ? (
+                      <div className="flex flex-col items-end gap-1.5">
+                        {alreadySaved && (
+                          <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-800">
+                            Already saved
+                          </span>
+                        )}
+                        <button
+                          className="btn-secondary h-9 rounded-md px-3 text-xs font-medium"
+                          onClick={() => void handleSaveWord(entry, resultKey)}
+                          disabled={savingKey === resultKey || !selectedDeckId || alreadySaved}
+                        >
+                          {savingKey === resultKey ? 'Saving...' : alreadySaved ? 'Saved' : 'Save'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="btn-secondary h-9 rounded-md px-3 text-xs font-medium"
+                        onClick={() => navigate('/auth')}
+                      >
+                        Sign in to save
+                      </button>
+                    )}
+                  </div>
+
+                  {loadingExamplesKey === resultKey && (
+                    <p className="text-sm text-ink-400">Loading examples...</p>
+                  )}
+
+                  {loadingExamplesKey !== resultKey && examples.length === 0 && (
+                    <p className="rounded-md border border-dashed border-ink-200 bg-white px-4 py-3 text-sm text-ink-400">
+                      No examples found for this entry yet.
+                    </p>
+                  )}
+
+                  {examples.length > 0 && (
+                    <div className="grid gap-2">
+                      {examples.map((example) => {
+                        const selected = example.id === selectedExampleId
+                        return (
+                          <button
+                            key={example.id}
+                            className={`rounded-md border px-4 py-3 text-left transition-colors duration-150 ${
+                              selected
+                                ? 'border-red-600 bg-white'
+                                : 'border-ink-50 bg-white hover:border-ink-200 hover:bg-red-50'
+                            }`}
+                            type="button"
+                            onClick={() =>
+                              setSelectedExampleByKey((current) => ({
+                                ...current,
+                                [resultKey]: example.id,
+                              }))
+                            }
+                          >
+                            <div className="flex items-start gap-3">
+                              <span
+                                className={`mt-1 h-2.5 w-2.5 rounded-full border ${
+                                  selected
+                                    ? 'border-red-600 bg-red-600'
+                                    : 'border-ink-200 bg-white'
+                                }`}
+                              />
+                              <span className="min-w-0">
+                                <span className="block font-display text-lg text-ink-900">
+                                  {example.chinese}
+                                </span>
+                                {example.pinyin && (
+                                  <span className="mt-1 block text-xs font-medium text-red-600">
+                                    {formatPinyin(example.pinyin)}
+                                  </span>
+                                )}
+                                <span className="mt-1 block text-sm text-ink-400">
+                                  {example.english}
+                                </span>
+                              </span>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             )
           })}

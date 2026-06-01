@@ -81,6 +81,45 @@ model VocabularyEntry {
   @@map("vocabulary_entries")
 }
 
+model ExampleSentence {
+  id                    String                @id @default(uuid()) @db.Uuid
+  source                String                @default("tatoeba")
+  sourceSentenceId      String                @map("source_sentence_id")
+  translationSentenceId String                @map("translation_sentence_id")
+  chineseOriginal       String                @map("chinese_original")
+  chineseSimplified     String                @map("chinese_simplified")
+  english               String
+  pinyin                String?
+  charCount             Int                   @map("char_count")
+  wordCount             Int                   @map("word_count")
+  estimatedHskLevel     Int?                  @map("estimated_hsk_level")
+  deckWords             DeckWord[]
+  terms                 ExampleSentenceTerm[]
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  @@unique([source, sourceSentenceId, translationSentenceId])
+  @@index([sourceSentenceId])
+  @@index([charCount])
+  @@index([estimatedHskLevel])
+  @@map("example_sentences")
+}
+
+model ExampleSentenceTerm {
+  id                String          @id @default(uuid()) @db.Uuid
+  exampleSentenceId String          @map("example_sentence_id") @db.Uuid
+  term              String
+  pinyin            String?
+  hskLevel          Int?            @map("hsk_level")
+  sentence          ExampleSentence @relation(fields: [exampleSentenceId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  @@unique([exampleSentenceId, term])
+  @@index([term])
+  @@index([hskLevel])
+  @@map("example_sentence_terms")
+}
+
 model Deck {
   id          String     @id @default(uuid()) @db.Uuid
   userId      String     @map("user_id") @db.Uuid
@@ -102,13 +141,16 @@ model DeckWord {
   deckId            String          @map("deck_id") @db.Uuid
   vocabularyEntryId String          @map("vocabulary_entry_id") @db.Uuid
   sourceReadingId   String?         @map("source_reading_id") @db.Uuid
+  exampleSentenceId String?         @map("example_sentence_id") @db.Uuid
   exampleSentence   String?         @map("example_sentence")
   deck              Deck            @relation(fields: [deckId], references: [id], onDelete: Cascade)
   vocabularyEntry   VocabularyEntry @relation(fields: [vocabularyEntryId], references: [id], onDelete: Cascade)
   sourceReading     Reading?        @relation(fields: [sourceReadingId], references: [id])
+  example            ExampleSentence? @relation(fields: [exampleSentenceId], references: [id], onDelete: SetNull)
   createdAt         DateTime        @default(now()) @map("created_at")
 
   @@unique([deckId, vocabularyEntryId])
   @@index([deckId])
+  @@index([exampleSentenceId])
   @@map("deck_words")
 }

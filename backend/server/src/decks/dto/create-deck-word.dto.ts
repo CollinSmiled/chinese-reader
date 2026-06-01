@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 
 export class CreateDeckWordDto {
   @ApiProperty({
@@ -35,6 +35,11 @@ export class CreateDeckWordDto {
   @IsOptional()
   @IsString()
   sourceReadingId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  exampleSentenceId?: string;
 
   @ApiPropertyOptional({
     example: '今天我去了商店买东西。',

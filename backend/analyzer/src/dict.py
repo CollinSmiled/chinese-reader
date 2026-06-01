@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from functools import lru_cache
-from hsk import get_hsk_level
+from .hsk import get_hsk_level
 
 DICT_PATH = Path(__file__).parent.parent / "data" / "processed" / "cc_cedict.json"
 

@@ -71,7 +71,16 @@ export interface DeckWord {
   meaning: string | null
   hskLevel: number | null
   sourceReadingId: string | null
+  exampleSentenceId: string | null
   exampleSentence: string | null
+  example: {
+    id: string
+    chinese: string
+    chineseOriginal: string
+    english: string
+    pinyin: string | null
+    source: string
+  } | null
   createdAt: string
 }
 
@@ -81,6 +90,20 @@ export interface DictionarySearchResult {
   pinyin: string
   definitions: string[]
   hskLevel: number | null
+}
+
+export interface ExampleSentence {
+  id: string
+  chinese: string
+  chineseOriginal: string
+  english: string
+  pinyin: string | null
+  source: string
+  sourceSentenceId: string
+  translationSentenceId: string
+  charCount: number
+  wordCount: number
+  estimatedHskLevel: number | null
 }
 
 export type HskBand = 1 | 2 | 3 | 4 | 5 | 6 | 'advanced'

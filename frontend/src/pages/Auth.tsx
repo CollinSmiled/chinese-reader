@@ -4,13 +4,24 @@ import { useAuth } from '../auth/AuthContext'
 
 type Mode = 'login' | 'register'
 
+interface AuthFormState {
+  email: string
+  password: string
+}
+
 export default function Auth() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, login, register } = useAuth()
   const [mode, setMode] = useState<Mode>('login')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [loginForm, setLoginForm] = useState<AuthFormState>({
+    email: '',
+    password: '',
+  })
+  const [registerForm, setRegisterForm] = useState<AuthFormState>({
+    email: '',
+    password: '',
+  })
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -25,24 +36,45 @@ export default function Auth() {
 
   if (user) return <Navigate to={returnTo} replace state={returnState} />
 
+  const form = mode === 'login' ? loginForm : registerForm
+  const setForm = mode === 'login' ? setLoginForm : setRegisterForm
+
   const passwordRequirements = [
-    { label: 'At least 8 characters', met: password.length >= 8 },
-    { label: 'Includes a number or symbol', met: /[\d\W]/.test(password) },
+    { label: 'At least 8 characters', met: form.password.length >= 8 },
+    { label: 'Includes a number or symbol', met: /[\d\W]/.test(form.password) },
   ]
-  const passwordsMatch = password === confirmPassword
+  const passwordsMatch = form.password === confirmPassword
   const registerValid =
     passwordRequirements.every((requirement) => requirement.met) && passwordsMatch
+
+  const updateForm = (changes: Partial<AuthFormState>) => {
+    setForm((current) => ({ ...current, ...changes }))
+  }
+
+  const handleModeChange = (nextMode: Mode) => {
+    setMode(nextMode)
+    setError(null)
+    setShowPassword(false)
+    setShowConfirmPassword(false)
+    setShowRequirements(false)
+  }
 
   const handleSubmit = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      if (mode === 'login') await login(email, password)
-      else await register(email, password)
+      if (mode === 'login') await login(form.email, form.password)
+      else await register(form.email, form.password)
       navigate(returnTo, { state: returnState })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      setError(
+        mode === 'login'
+          ? 'Wrong email or password.'
+          : err instanceof Error
+            ? err.message
+            : 'Unknown error',
+      )
     } finally {
       setLoading(false)
     }
@@ -72,7 +104,7 @@ export default function Auth() {
                     ? 'bg-white text-ink-900'
                     : 'text-ink-400 hover:text-ink-900'
                 }`}
-                onClick={() => setMode(item)}
+                onClick={() => handleModeChange(item)}
               >
                 {item === 'login' ? 'Sign in' : 'Register'}
               </button>
@@ -83,8 +115,8 @@ export default function Auth() {
             Email
             <input
               className="border border-ink-50 rounded-md px-3 py-2.5 bg-ink-0 outline-none focus:border-ink-200"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              value={form.email}
+              onChange={(event) => updateForm({ email: event.target.value })}
               type="email"
             />
           </label>
@@ -94,8 +126,8 @@ export default function Auth() {
             <div className="relative">
               <input
                 className="w-full border border-ink-50 rounded-md px-3 py-2.5 pr-16 bg-ink-0 outline-none focus:border-ink-200"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                value={form.password}
+                onChange={(event) => updateForm({ password: event.target.value })}
                 onFocus={() => mode === 'register' && setShowRequirements(true)}
                 type={showPassword ? 'text' : 'password'}
               />
@@ -178,8 +210,8 @@ export default function Auth() {
             onClick={handleSubmit}
             disabled={
               loading ||
-              !email ||
-              !password ||
+              !form.email ||
+              !form.password ||
               (mode === 'register' && !registerValid)
             }
           >

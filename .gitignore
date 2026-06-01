@@ -14,5 +14,9 @@ build/
 .env.local
 .env.*.local
 
+# Large downloaded datasets
+backend/analyzer/data/raw/tatoeba/
+backend/analyzer/data/processed/tatoeba_examples.jsonl
+
 # Editor
 .vscode/
